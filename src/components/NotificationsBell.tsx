@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, CheckCheck, Loader2, Inbox } from 'lucide-react';
-import { Bolt Database } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth';
 import { navigate, type Route } from '../router';
 import type { AppNotification } from '../types';
@@ -12,15 +12,12 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
-  const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const PANEL_WIDTH = 320;
-  const PANEL_MARGIN = 8;
 
   const loadNotifications = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await Bolt Database
+    const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
@@ -40,7 +37,7 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
   // Realtime: listen for new notifications
   useEffect(() => {
     if (!user) return;
-    const channel = Bolt Database
+    const channel = supabase
       .channel('notifications')
       .on(
         'postgres_changes',
@@ -59,7 +56,7 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
     };
   }, [user]);
 
-  // Close panel on outside click, resize, or scroll
+  // Close panel on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (
@@ -72,30 +69,9 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
         setOpen(false);
       }
     }
-    function handleClose() {
-      setOpen(false);
-    }
     document.addEventListener('mousedown', handleClick);
-    window.addEventListener('resize', handleClose);
-    window.addEventListener('scroll', handleClose, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      window.removeEventListener('resize', handleClose);
-      window.removeEventListener('scroll', handleClose, true);
-    };
+    return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
-
-  function togglePanel() {
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const vw = window.innerWidth;
-      let left = rect.right - PANEL_WIDTH;
-      if (left < PANEL_MARGIN) left = PANEL_MARGIN;
-      if (left + PANEL_WIDTH > vw - PANEL_MARGIN) left = vw - PANEL_WIDTH - PANEL_MARGIN;
-      setPanelPos({ top: rect.bottom + PANEL_MARGIN, left });
-    }
-    setOpen((o) => !o);
-  }
 
   async function markAsRead(id: string) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
@@ -121,7 +97,7 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
     <div className="relative">
       <button
         ref={buttonRef}
-        onClick={togglePanel}
+        onClick={() => setOpen((o) => !o)}
         className={`relative rounded-lg p-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
           onGreen
             ? 'text-white hover:bg-white/15'
@@ -139,11 +115,10 @@ export default function NotificationsBell({ onGreen = false }: { onGreen?: boole
         )}
       </button>
 
-      {open && panelPos && (
+      {open && (
         <div
           ref={panelRef}
-          style={{ top: panelPos.top, left: panelPos.left }}
-          className="fixed z-50 w-80 max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-cream-200 bg-white shadow-lg animate-fade-in"
+          className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-cream-200 bg-white shadow-lg animate-fade-in"
         >
           <div className="flex items-center justify-between border-b border-cream-200 px-4 py-3">
             <span className="text-sm font-semibold text-ink-900">Notifications</span>
